@@ -30,6 +30,9 @@ public static class SequenceTextFile
                 case WaitForPixelChangeStep wait:
                     writer.WriteLine($"{prefix}PIXEL_CHANGE {wait.ScreenX} {wait.ScreenY} {wait.PollMilliseconds}");
                     break;
+                case WaitForPixelStep wait:
+                    writer.WriteLine($"{prefix}PIXEL {wait.ScreenX} {wait.ScreenY} {wait.TargetColor.ToArgb():X8} {wait.Delta.ToString(CultureInfo.InvariantCulture)} {wait.PollMilliseconds}");
+                    break;
                 case KeyboardCommandStep command:
                     writer.WriteLine($"{prefix}KEY {KeyboardShortcut.Format(command.Key)}");
                     break;
@@ -72,6 +75,14 @@ public static class SequenceTextFile
                     ScreenY = ParseSignedInt(parts[2], index),
                     PollMilliseconds = ParsePositiveInt(parts[3], index)
                 },
+                "PIXEL" when parts.Length == 6 => new WaitForPixelStep
+                {
+                    ScreenX = ParseSignedInt(parts[1], index),
+                    ScreenY = ParseSignedInt(parts[2], index),
+                    TargetColor = ParseColor(parts[3], index),
+                    Delta = ParseDelta(parts[4], index),
+                    PollMilliseconds = ParsePositiveInt(parts[5], index)
+                },
                 "KEY" when parts.Length >= 2 => new KeyboardCommandStep { Key = ParseKey(line.Trim(), index) },
                 "MOUSE" when parts.Length == 3 => new MouseCommandStep
                 {
@@ -108,6 +119,20 @@ public static class SequenceTextFile
     {
         if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int result))
             throw new FormatException($"Line {index + 1}: expected a screen coordinate.");
+        return result;
+    }
+
+    private static Color ParseColor(string value, int index)
+    {
+        if (!uint.TryParse(value, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out uint argb))
+            throw new FormatException($"Line {index + 1}: expected an AARRGGBB color value.");
+        return Color.FromArgb(unchecked((int)argb));
+    }
+
+    private static double ParseDelta(string value, int index)
+    {
+        if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double result) || result is < 0 or > 1)
+            throw new FormatException($"Line {index + 1}: delta must be between 0 and 1.");
         return result;
     }
 

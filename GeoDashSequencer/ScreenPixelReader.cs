@@ -26,6 +26,11 @@ internal static partial class ScreenPixelReader
         }
     }
 
+    public static Color ToColor(uint color) => Color.FromArgb(
+        (byte)(color & 0xFF),
+        (byte)((color >> 8) & 0xFF),
+        (byte)((color >> 16) & 0xFF));
+
     [LibraryImport("user32.dll", SetLastError = true)]
     private static partial nint GetDC(nint window);
 

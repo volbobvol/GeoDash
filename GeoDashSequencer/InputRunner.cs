@@ -19,6 +19,9 @@ public static partial class InputRunner
                 case WaitForPixelChangeStep wait:
                     await WaitForPixelChangeAsync(wait, cancellationToken);
                     break;
+                case WaitForPixelStep wait:
+                    await WaitForPixelAsync(wait, cancellationToken);
+                    break;
                 case KeyboardCommandStep command:
                     SendKeyboard(command.Key);
                     break;
@@ -42,6 +45,25 @@ public static partial class InputRunner
             if (ScreenPixelReader.ReadColor(wait.ScreenX, wait.ScreenY) != initialColor)
                 return;
         }
+    }
+
+    private static async Task WaitForPixelAsync(WaitForPixelStep wait, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            Color currentColor = ScreenPixelReader.ToColor(ScreenPixelReader.ReadColor(wait.ScreenX, wait.ScreenY));
+            if (GetNormalizedColorDistance(currentColor, wait.TargetColor) <= wait.Delta)
+                return;
+            await Task.Delay(wait.PollMilliseconds, cancellationToken);
+        }
+    }
+
+    private static double GetNormalizedColorDistance(Color left, Color right)
+    {
+        int redDifference = left.R - right.R;
+        int greenDifference = left.G - right.G;
+        int blueDifference = left.B - right.B;
+        return Math.Sqrt(redDifference * redDifference + greenDifference * greenDifference + blueDifference * blueDifference) / (255 * Math.Sqrt(3));
     }
 
     private static void SendMouse(MouseCommandStep command)

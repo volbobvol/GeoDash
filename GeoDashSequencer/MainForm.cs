@@ -1,5 +1,5 @@
 namespace GeoDashSequencer;
-
+R r R r R r R r R r R r R r R r R r R r R r R r R r R r R r R r R r R r R r R r qqqqqqqqqqqqqqqqqqqq
 public sealed class MainForm : Form
 {
     private readonly List<SequenceStep> _steps = [];
@@ -18,6 +18,7 @@ public sealed class MainForm : Form
     private CancellationTokenSource? _runCancellation;
     private FlowLayoutPanel? _indicatorSurface;
     private int _indicatorIndex = -1;
+    private string? _pointerPreviewText;
 
     public MainForm()
     {
@@ -80,6 +81,7 @@ public sealed class MainForm : Form
         palette.Controls.Add(new Label { Text = "Components", AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(3, 3, 3, 10) });
         palette.Controls.Add(CreateDragButton("Delay", "delay"));
         palette.Controls.Add(CreateDragButton("Wait for pixel change", "pixel-change"));
+        palette.Controls.Add(CreateDragButton("Wait for pixel", "pixel"));
         palette.Controls.Add(CreateDragButton("Keyboard command", "keyboard"));
         palette.Controls.Add(CreateDragButton("Mouse command", "mouse"));
         palette.Controls.Add(CreateDragButton("Loop", "loop"));
@@ -270,6 +272,7 @@ public sealed class MainForm : Form
     {
         "delay" => new DelayStep(),
         "pixel-change" => new WaitForPixelChangeStep(),
+        "pixel" => new WaitForPixelStep(),
         "keyboard" => new KeyboardCommandStep(),
         "mouse" => new MouseCommandStep(),
         "loop" => new LoopStep(),
@@ -382,13 +385,37 @@ public sealed class MainForm : Form
 
     private void UpdatePointerCoordinates()
     {
-        bool showCoordinates = _selectedStep is WaitForPixelChangeStep;
-        _pointerCoordinates.Visible = showCoordinates;
-        if (showCoordinates)
+        bool showCoordinates = _selectedStep is WaitForPixelChangeStep or WaitForPixelStep;
+        if (_pointerCoordinates.Visible != showCoordinates)
+            _pointerCoordinates.Visible = showCoordinates;
+        if (!showCoordinates)
         {
-            Point position = Cursor.Position;
-            _pointerCoordinates.Text = $"Current mouse position: X {position.X}, Y {position.Y}";
+            _pointerPreviewText = null;
+            return;
         }
+
+        if (_properties.ContainsFocus)
+            return;
+
+        Point position = Cursor.Position;
+        string previewText = $"Current mouse position: X {position.X}, Y {position.Y}";
+        if (_selectedStep is WaitForPixelStep)
+        {
+            try
+            {
+                Color color = ScreenPixelReader.ToColor(ScreenPixelReader.ReadColor(position.X, position.Y));
+                previewText += $"{Environment.NewLine}Current RGB: {color.R}, {color.G}, {color.B}";
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                previewText += $"{Environment.NewLine}Current RGB: unavailable";
+            }
+        }
+
+        if (previewText == _pointerPreviewText)
+            return;
+        _pointerPreviewText = previewText;
+        _pointerCoordinates.Text = previewText;
     }
 
     private void DeleteSelected()

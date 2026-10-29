@@ -21,6 +21,7 @@ internal sealed class StepCard : TableLayoutPanel
         {
             DelayStep => Color.FromArgb(255, 247, 220),
             WaitForPixelChangeStep => Color.FromArgb(239, 232, 255),
+            WaitForPixelStep => Color.FromArgb(224, 245, 242),
             KeyboardCommandStep => Color.FromArgb(225, 240, 255),
             MouseCommandStep => Color.FromArgb(255, 232, 224),
             LoopStep => Color.FromArgb(229, 244, 240),
@@ -127,6 +128,7 @@ internal sealed class StepCard : TableLayoutPanel
     {
         DelayStep => Color.FromArgb(130, 92, 0),
         WaitForPixelChangeStep => Color.FromArgb(92, 55, 155),
+        WaitForPixelStep => Color.FromArgb(0, 110, 102),
         KeyboardCommandStep => Color.FromArgb(0, 76, 153),
         MouseCommandStep => Color.FromArgb(155, 55, 25),
         LoopStep => Color.FromArgb(25, 105, 78),

@@ -33,6 +33,10 @@ internal sealed class StepTypeIcon : Control
                 eventArgs.Graphics.DrawRectangle(pen, bounds);
                 eventArgs.Graphics.FillRectangle(brush, Width / 2 - 2, Height / 2 - 2, 4, 4);
                 break;
+            case WaitForPixelStep:
+                eventArgs.Graphics.DrawEllipse(pen, bounds);
+                eventArgs.Graphics.FillEllipse(brush, Width / 2 - 2, Height / 2 - 2, 4, 4);
+                break;
             case KeyboardCommandStep:
                 eventArgs.Graphics.DrawRectangle(pen, bounds);
                 for (int row = 0; row < 2; row++)

@@ -50,6 +50,46 @@ public sealed class WaitForPixelChangeStep : SequenceStep
     public override string Summary => $"Wait for pixel change at {ScreenX}, {ScreenY}";
 }
 
+public sealed class WaitForPixelStep : SequenceStep
+{
+    private int _pollMilliseconds = 50;
+    private double _delta;
+
+    [DisplayName("Screen X")]
+    [Description("Absolute horizontal screen coordinate to watch.")]
+    public int ScreenX { get; set; }
+
+    [DisplayName("Screen Y")]
+    [Description("Absolute vertical screen coordinate to watch.")]
+    public int ScreenY { get; set; }
+
+    [DisplayName("Target color")]
+    [Description("The color that allows the sequence to continue.")]
+    public Color TargetColor { get; set; } = Color.Black;
+
+    [DisplayName("Delta")]
+    [Description("Normalized color distance: 0 requires an exact match and 1 matches any color.")]
+    public double Delta
+    {
+        get => _delta;
+        set => _delta = value is >= 0 and <= 1
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(value), "Delta must be between 0 and 1.");
+    }
+
+    [DisplayName("Poll milliseconds")]
+    [Description("How often the pixel is sampled while waiting for a match.")]
+    public int PollMilliseconds
+    {
+        get => _pollMilliseconds;
+        set => _pollMilliseconds = value > 0
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(value), "Poll milliseconds must be greater than zero.");
+    }
+
+    public override string Summary => $"Wait for pixel {TargetColor.R:X2}{TargetColor.G:X2}{TargetColor.B:X2} at {ScreenX}, {ScreenY}";
+}
+
 public enum MouseButton
 {
     Left,
@@ -117,6 +157,7 @@ internal static class SequenceValidator
             {
                 DelayStep delay => new DelayStep { Milliseconds = delay.Milliseconds },
                 WaitForPixelChangeStep wait => new WaitForPixelChangeStep { ScreenX = wait.ScreenX, ScreenY = wait.ScreenY, PollMilliseconds = wait.PollMilliseconds },
+                WaitForPixelStep wait => new WaitForPixelStep { ScreenX = wait.ScreenX, ScreenY = wait.ScreenY, TargetColor = wait.TargetColor, Delta = wait.Delta, PollMilliseconds = wait.PollMilliseconds },
                 KeyboardCommandStep keyboard when KeyboardShortcut.IsValid(keyboard.Key) => new KeyboardCommandStep { Key = keyboard.Key },
                 KeyboardCommandStep => throw new InvalidOperationException("A keyboard command contains an invalid key."),
                 MouseCommandStep mouse when Enum.IsDefined(mouse.Button) && Enum.IsDefined(mouse.Action) => new MouseCommandStep { Button = mouse.Button, Action = mouse.Action },
