@@ -7,7 +7,7 @@ public static class SequenceTextFile
     public static void Save(string path, IEnumerable<SequenceStep> steps)
     {
         using StreamWriter writer = new(path);
-        WriteSteps(writer, steps, 0);
+        WriteSteps(writer, SequenceValidator.CreateExecutionSnapshot(steps), 0);
     }
 
     public static List<SequenceStep> Load(string path)
@@ -27,8 +27,11 @@ public static class SequenceTextFile
                 case DelayStep delay:
                     writer.WriteLine($"{prefix}DELAY {delay.Milliseconds}");
                     break;
+                case WaitForPixelChangeStep wait:
+                    writer.WriteLine($"{prefix}PIXEL_CHANGE {wait.ScreenX} {wait.ScreenY} {wait.PollMilliseconds}");
+                    break;
                 case KeyboardCommandStep command:
-                    writer.WriteLine($"{prefix}KEY {command.Key}");
+                    writer.WriteLine($"{prefix}KEY {KeyboardShortcut.Format(command.Key)}");
                     break;
                 case MouseCommandStep command:
                     writer.WriteLine($"{prefix}MOUSE {command.Button} {command.Action}");
@@ -63,7 +66,13 @@ public static class SequenceTextFile
             SequenceStep step = parts[0].ToUpperInvariant() switch
             {
                 "DELAY" when parts.Length == 2 => new DelayStep { Milliseconds = ParseInt(parts[1], index) },
-                "KEY" when parts.Length == 2 => new KeyboardCommandStep { Key = ParseEnum<Keys>(parts[1], index) },
+                "PIXEL_CHANGE" when parts.Length == 4 => new WaitForPixelChangeStep
+                {
+                    ScreenX = ParseSignedInt(parts[1], index),
+                    ScreenY = ParseSignedInt(parts[2], index),
+                    PollMilliseconds = ParsePositiveInt(parts[3], index)
+                },
+                "KEY" when parts.Length >= 2 => new KeyboardCommandStep { Key = ParseKey(line.Trim(), index) },
                 "MOUSE" when parts.Length == 3 => new MouseCommandStep
                 {
                     Button = ParseEnum<MouseButton>(parts[1], index),
@@ -88,9 +97,35 @@ public static class SequenceTextFile
         return result;
     }
 
+    private static int ParsePositiveInt(string value, int index)
+    {
+        if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int result) || result <= 0)
+            throw new FormatException($"Line {index + 1}: expected a positive number.");
+        return result;
+    }
+
+    private static int ParseSignedInt(string value, int index)
+    {
+        if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int result))
+            throw new FormatException($"Line {index + 1}: expected a screen coordinate.");
+        return result;
+    }
+
+    private static Keys ParseKey(string line, int index)
+    {
+        try
+        {
+            return KeyboardShortcut.Parse(line[3..].Trim());
+        }
+        catch (FormatException exception)
+        {
+            throw new FormatException($"Line {index + 1}: {exception.Message}");
+        }
+    }
+
     private static T ParseEnum<T>(string value, int index) where T : struct, Enum
     {
-        if (!Enum.TryParse(value, true, out T result))
+        if (!Enum.TryParse(value, true, out T result) || !Enum.IsDefined(result))
             throw new FormatException($"Line {index + 1}: invalid {typeof(T).Name}.");
         return result;
     }

@@ -1,31 +1,46 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 
 namespace GeoDashSequencer;
 
-public static class InputRunner
+public static partial class InputRunner
 {
-    public static async Task RunAsync(IEnumerable<SequenceStep> steps, CancellationToken cancellationToken)
+    public static async Task RunAsync(IEnumerable<SequenceStep> steps, CancellationToken cancellationToken, Action<SequenceStep>? stepStarted = null)
     {
         foreach (SequenceStep step in steps)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            stepStarted?.Invoke(step);
             switch (step)
             {
                 case DelayStep delay:
                     await Task.Delay(delay.Milliseconds, cancellationToken);
                     break;
+                case WaitForPixelChangeStep wait:
+                    await WaitForPixelChangeAsync(wait, cancellationToken);
+                    break;
                 case KeyboardCommandStep command:
-                    SendKeyboard(command.Key, false);
-                    SendKeyboard(command.Key, true);
+                    SendKeyboard(command.Key);
                     break;
                 case MouseCommandStep command:
                     SendMouse(command);
                     break;
                 case LoopStep loop:
                     for (int repetition = 0; repetition < loop.Repetitions; repetition++)
-                        await RunAsync(loop.Steps, cancellationToken);
+                        await RunAsync(loop.Steps, cancellationToken, stepStarted);
                     break;
             }
+        }
+    }
+
+    private static async Task WaitForPixelChangeAsync(WaitForPixelChangeStep wait, CancellationToken cancellationToken)
+    {
+        uint initialColor = ScreenPixelReader.ReadColor(wait.ScreenX, wait.ScreenY);
+        while (true)
+        {
+            await Task.Delay(wait.PollMilliseconds, cancellationToken);
+            if (ScreenPixelReader.ReadColor(wait.ScreenX, wait.ScreenY) != initialColor)
+                return;
         }
     }
 
@@ -33,19 +48,53 @@ public static class InputRunner
     {
         uint down = command.Button == MouseButton.Left ? MouseEventLeftDown : MouseEventRightDown;
         uint up = command.Button == MouseButton.Left ? MouseEventLeftUp : MouseEventRightUp;
-        if (command.Action != MouseAction.Up)
-            SendMouse(down);
-        if (command.Action != MouseAction.Down)
-            SendMouse(up);
+        Input[] inputs = command.Action switch
+        {
+            MouseAction.Click => [CreateMouseInput(down), CreateMouseInput(up)],
+            MouseAction.Down => [CreateMouseInput(down)],
+            MouseAction.Up => [CreateMouseInput(up)],
+            _ => throw new InvalidOperationException("The mouse command contains an invalid action.")
+        };
+        SendInputs(inputs);
     }
 
-    private static void SendKeyboard(Keys key, bool keyUp) => SendInput(1,
-        [new Input { Type = InputKeyboard, Data = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = (ushort)key, Flags = keyUp ? KeyEventKeyUp : 0 } } }],
-        Marshal.SizeOf<Input>());
+    private static void SendKeyboard(Keys shortcut)
+    {
+        List<Keys> modifiers = [];
+        if (shortcut.HasFlag(Keys.Control))
+            modifiers.Add(Keys.ControlKey);
+        if (shortcut.HasFlag(Keys.Shift))
+            modifiers.Add(Keys.ShiftKey);
+        if (shortcut.HasFlag(Keys.Alt))
+            modifiers.Add(Keys.Menu);
 
-    private static void SendMouse(uint flags) => SendInput(1,
-        [new Input { Type = InputMouse, Data = new InputUnion { Mouse = new MouseInput { Flags = flags } } }],
-        Marshal.SizeOf<Input>());
+        List<Input> inputs = modifiers.Select(key => CreateKeyboardInput(key, false)).ToList();
+        Keys keyCode = shortcut & Keys.KeyCode;
+        inputs.Add(CreateKeyboardInput(keyCode, false));
+        inputs.Add(CreateKeyboardInput(keyCode, true));
+        for (int index = modifiers.Count - 1; index >= 0; index--)
+            inputs.Add(CreateKeyboardInput(modifiers[index], true));
+        SendInputs([.. inputs]);
+    }
+
+    private static Input CreateKeyboardInput(Keys key, bool keyUp) => new()
+    {
+        Type = InputKeyboard,
+        Data = new InputUnion { Keyboard = new KeyboardInput { VirtualKey = (ushort)key, Flags = keyUp ? KeyEventKeyUp : 0 } }
+    };
+
+    private static Input CreateMouseInput(uint flags) => new()
+    {
+        Type = InputMouse,
+        Data = new InputUnion { Mouse = new MouseInput { Flags = flags } }
+    };
+
+    private static void SendInputs(params Input[] inputs)
+    {
+        uint sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<Input>());
+        if (sent != (uint)inputs.Length)
+            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Windows rejected one or more simulated inputs.");
+    }
 
     private const uint InputMouse = 0;
     private const uint InputKeyboard = 1;
@@ -55,8 +104,8 @@ public static class InputRunner
     private const uint MouseEventRightDown = 0x0008;
     private const uint MouseEventRightUp = 0x0010;
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern uint SendInput(uint count, Input[] inputs, int size);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    private static partial uint SendInput(uint count, [In] Input[] inputs, int size);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Input
